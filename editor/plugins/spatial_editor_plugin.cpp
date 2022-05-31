@@ -77,6 +77,181 @@
 #define MIN_FOV 0.01
 #define MAX_FOV 179
 
+bool SpatialEditor::_prevent_gizmo_generation = false;
+
+void ViewportNavigationControl::_notification(int p_what) {
+	if (p_what == NOTIFICATION_ENTER_TREE) {
+		if (!is_connected("mouse_exited", this, "_on_mouse_exited")) {
+			connect("mouse_exited", this, "_on_mouse_exited");
+		}
+		if (!is_connected("mouse_entered", this, "_on_mouse_entered")) {
+			connect("mouse_entered", this, "_on_mouse_entered");
+		}
+	}
+
+	if (p_what == NOTIFICATION_DRAW && viewport != nullptr) {
+		_draw();
+		_update_navigation();
+	}
+}
+
+void ViewportNavigationControl::_draw() {
+	if (nav_mode == SpatialEditorViewport::NAVIGATION_NONE) {
+		return;
+	}
+
+	Vector2 center = get_size() / 2.0;
+	float radius = get_size().x / 2.0;
+
+	const bool focused = focused_index != -1;
+	draw_circle(center, radius, Color(0.5, 0.5, 0.5, focused || hovered ? 0.35 : 0.15));
+
+	const Color c = focused ? Color(0.9, 0.9, 0.9, 0.9) : Color(0.5, 0.5, 0.5, 0.25);
+
+	Vector2 circle_pos = focused ? center.move_toward(focused_pos, radius) : center;
+
+	draw_circle(circle_pos, AXIS_CIRCLE_RADIUS, c);
+	draw_circle(circle_pos, AXIS_CIRCLE_RADIUS * 0.8, c.darkened(0.4));
+}
+
+void ViewportNavigationControl::_process_click(int p_index, Vector2 p_position, bool p_pressed) {
+	hovered = false;
+	update();
+
+	if (focused_index != -1 && focused_index != p_index) {
+		return;
+	}
+	if (p_pressed) {
+		if (p_position.distance_to(get_size() / 2.0) < get_size().x / 2.0) {
+			focused_pos = p_position;
+			focused_index = p_index;
+			update();
+		}
+	} else {
+		focused_index = -1;
+		if (Input::get_singleton()->get_mouse_mode() == Input::MOUSE_MODE_CAPTURED) {
+			Input::get_singleton()->set_mouse_mode(Input::MOUSE_MODE_VISIBLE);
+			Input::get_singleton()->warp_mouse_position(focused_mouse_start);
+		}
+	}
+}
+
+void ViewportNavigationControl::_process_drag(int p_index, Vector2 p_position, Vector2 p_relative_position) {
+	if (focused_index == p_index) {
+		if (Input::get_singleton()->get_mouse_mode() == Input::MOUSE_MODE_VISIBLE) {
+			Input::get_singleton()->set_mouse_mode(Input::MOUSE_MODE_CAPTURED);
+			focused_mouse_start = p_position;
+		}
+		focused_pos += p_relative_position;
+		update();
+	}
+}
+
+void ViewportNavigationControl::_gui_input(Ref<InputEvent> p_event) {
+	// Mouse events
+	const Ref<InputEventMouseButton> mouse_button = p_event;
+	if (mouse_button.is_valid() && mouse_button->get_button_index() == BUTTON_LEFT) {
+		_process_click(100, mouse_button->get_position(), mouse_button->is_pressed());
+	}
+
+	const Ref<InputEventMouseMotion> mouse_motion = p_event;
+	if (mouse_motion.is_valid()) {
+		_process_drag(100, mouse_motion->get_global_position(), viewport->_get_warped_mouse_motion(mouse_motion));
+	}
+
+	// Touch events
+	const Ref<InputEventScreenTouch> screen_touch = p_event;
+	if (screen_touch.is_valid()) {
+		_process_click(screen_touch->get_index(), screen_touch->get_position(), screen_touch->is_pressed());
+	}
+
+	const Ref<InputEventScreenDrag> screen_drag = p_event;
+	if (screen_drag.is_valid()) {
+		_process_drag(screen_drag->get_index(), screen_drag->get_position(), screen_drag->get_relative());
+	}
+}
+
+void ViewportNavigationControl::_update_navigation() {
+	if (focused_index == -1) {
+		return;
+	}
+
+	Vector2 delta = focused_pos - (get_size() / 2.0);
+	Vector2 delta_normalized = delta.normalized();
+	switch (nav_mode) {
+		case SpatialEditorViewport::NavigationMode::NAVIGATION_MOVE: {
+			real_t speed_multiplier = MIN(delta.length() / (get_size().x * 100.0), 3.0);
+			real_t speed = viewport->freelook_speed * speed_multiplier;
+
+			const SpatialEditorViewport::FreelookNavigationScheme navigation_scheme = (SpatialEditorViewport::FreelookNavigationScheme)EditorSettings::get_singleton()->get("editors/3d/freelook/freelook_navigation_scheme").operator int();
+
+			Vector3 forward;
+			if (navigation_scheme == SpatialEditorViewport::FreelookNavigationScheme::FREELOOK_FULLY_AXIS_LOCKED) {
+				// Forward/backward keys will always go straight forward/backward, never moving on the Y axis.
+				forward = Vector3(0, 0, delta_normalized.y).rotated(Vector3(0, 1, 0), viewport->camera->get_rotation().y);
+			} else {
+				// Forward/backward keys will be relative to the camera pitch.
+				forward = viewport->camera->get_transform().basis.xform(Vector3(0, 0, delta_normalized.y));
+			}
+
+			const Vector3 right = viewport->camera->get_transform().basis.xform(Vector3(delta_normalized.x, 0, 0));
+
+			const Vector3 direction = forward + right;
+			const Vector3 motion = direction * speed;
+			viewport->cursor.pos += motion;
+			viewport->cursor.eye_pos += motion;
+		} break;
+
+		case SpatialEditorViewport::NavigationMode::NAVIGATION_LOOK: {
+			real_t speed_multiplier = MIN(delta.length() / (get_size().x * 2.5), 3.0);
+			real_t speed = viewport->freelook_speed * speed_multiplier;
+			viewport->_nav_look(nullptr, delta_normalized * speed);
+		} break;
+
+		case SpatialEditorViewport::NAVIGATION_PAN: {
+			real_t speed_multiplier = MIN(delta.length() / (get_size().x), 3.0);
+			real_t speed = viewport->freelook_speed * speed_multiplier;
+			viewport->_nav_pan(nullptr, -delta_normalized * speed);
+		} break;
+		case SpatialEditorViewport::NAVIGATION_ZOOM: {
+			real_t speed_multiplier = MIN(delta.length() / (get_size().x), 3.0);
+			real_t speed = viewport->freelook_speed * speed_multiplier;
+			viewport->_nav_zoom(nullptr, delta_normalized * speed);
+		} break;
+		case SpatialEditorViewport::NAVIGATION_ORBIT: {
+			real_t speed_multiplier = MIN(delta.length() / (get_size().x), 3.0);
+			real_t speed = viewport->freelook_speed * speed_multiplier;
+			viewport->_nav_orbit(nullptr, delta_normalized * speed);
+		} break;
+		case SpatialEditorViewport::NAVIGATION_NONE: {
+		} break;
+	}
+}
+
+void ViewportNavigationControl::_on_mouse_entered() {
+	hovered = true;
+	update();
+}
+
+void ViewportNavigationControl::_on_mouse_exited() {
+	hovered = false;
+	update();
+}
+
+void ViewportNavigationControl::set_navigation_mode(SpatialEditorViewport::NavigationMode p_nav_mode) {
+	nav_mode = p_nav_mode;
+}
+
+void ViewportNavigationControl::set_viewport(SpatialEditorViewport *p_viewport) {
+	viewport = p_viewport;
+}
+
+void ViewportNavigationControl::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("_gui_input"), &ViewportNavigationControl::_gui_input);
+	ClassDB::bind_method(D_METHOD("_on_mouse_entered"), &ViewportNavigationControl::_on_mouse_entered);
+	ClassDB::bind_method(D_METHOD("_on_mouse_exited"), &ViewportNavigationControl::_on_mouse_exited);
+}
+
 void ViewportRotationControl::_notification(int p_what) {
 	if (p_what == NOTIFICATION_ENTER_TREE) {
 		axis_menu_options.clear();
@@ -6428,6 +6603,10 @@ void SpatialEditor::move_control_to_right_panel(Control *p_control) {
 }
 
 void SpatialEditor::_request_gizmo(Object *p_obj) {
+	if (_prevent_gizmo_generation) {
+		return;
+	}
+
 	Spatial *sp = Object::cast_to<Spatial>(p_obj);
 	if (!sp) {
 		return;
