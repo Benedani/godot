@@ -7025,7 +7025,6 @@ EditorNode::EditorNode() {
 	add_editor_plugin(memnew(RoomEditorPlugin(this)));
 	add_editor_plugin(memnew(OccluderEditorPlugin(this)));
 	add_editor_plugin(memnew(PortalEditorPlugin(this)));
-	add_editor_plugin(memnew(PackedSceneEditorPlugin(this)));
 	add_editor_plugin(memnew(MergeGroupEditorPlugin(this)));
 	add_editor_plugin(memnew(Path2DEditorPlugin(this)));
 	add_editor_plugin(memnew(PathEditorPlugin(this)));
