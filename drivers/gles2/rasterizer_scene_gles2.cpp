@@ -3392,10 +3392,10 @@ void RasterizerSceneGLES2::render_scene(const Transform &p_cam_transform, const 
 		glEnable(GL_SCISSOR_TEST);
 	}
 
+	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_TRUE);
 	glClearDepth(1.0f);
-	glEnable(GL_DEPTH_TEST);
 	glClear(GL_DEPTH_BUFFER_BIT);
 
 	// clear color
@@ -3511,8 +3511,8 @@ void RasterizerSceneGLES2::render_scene(const Transform &p_cam_transform, const 
 
 					//restore
 					glEnable(GL_BLEND);
-					glDepthMask(GL_TRUE);
 					glEnable(GL_DEPTH_TEST);
+					glDepthMask(GL_TRUE);
 					glEnable(GL_CULL_FACE);
 				} else {
 					// don't have a feed, just show greenscreen :)
