@@ -305,8 +305,8 @@ const GodotDisplayScreen = {
 			const scale = GodotDisplayScreen.getPixelRatio();
 			if (isFullscreen || wantsFullWindow) {
 				// We need to match screen size.
-				width = window.innerWidth * scale;
-				height = window.innerHeight * scale;
+				width = Math.round(window.innerWidth * scale);
+				height = Math.round(window.innerHeight * scale);
 			}
 			const csw = `${width / scale}px`;
 			const csh = `${height / scale}px`;
