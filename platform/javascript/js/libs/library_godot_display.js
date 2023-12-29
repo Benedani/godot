@@ -270,8 +270,8 @@ const GodotDisplayScreen = {
 				width = Math.round(window.innerWidth * scale);
 				height = Math.round(window.innerHeight * scale);
 			}
-			const csw = `${width / scale}px`;
-			const csh = `${height / scale}px`;
+			const csw = `${Math.floor(width / scale)}px`;
+			const csh = `${Math.floor(height / scale)}px`;
 			if (canvas.style.width !== csw || canvas.style.height !== csh || canvas.width !== width || canvas.height !== height) {
 				// Size doesn't match.
 				// Resize canvas, set correct CSS pixel size, update GL.

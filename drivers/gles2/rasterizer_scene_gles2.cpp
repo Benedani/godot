@@ -1364,7 +1364,7 @@ void RasterizerSceneGLES2::_set_cull(bool p_front, bool p_disabled, bool p_rever
 	}
 }
 
-bool RasterizerSceneGLES2::_setup_material(RasterizerStorageGLES2::Material *p_material, bool p_alpha_pass, Size2i p_skeleton_tex_size) {
+bool RasterizerSceneGLES2::_setup_material(RasterizerStorageGLES2::Material *p_material, bool p_alpha_pass, bool p_shadow, Size2i p_skeleton_tex_size) {
 	// material parameters
 
 	state.scene_shader.set_custom_shader(p_material->shader->custom_code_id);
@@ -1381,23 +1381,46 @@ bool RasterizerSceneGLES2::_setup_material(RasterizerStorageGLES2::Material *p_m
 
 	bool shader_rebind = state.scene_shader.bind();
 
-	if (p_material->shader->spatial.no_depth_test || p_material->shader->spatial.uses_depth_texture) {
-		glDisable(GL_DEPTH_TEST);
-	} else {
-		glEnable(GL_DEPTH_TEST);
+	bool depth_test = !(p_material->shader->spatial.no_depth_test || p_material->shader->spatial.uses_depth_texture);
+	if (state.current_depth_test != depth_test) {
+		if (depth_test) {
+			glEnable(GL_DEPTH_TEST);
+		} else {
+			glDisable(GL_DEPTH_TEST);
+		}
+
+		state.current_depth_test = depth_test;
 	}
 
-	switch (p_material->shader->spatial.depth_draw_mode) {
-		case RasterizerStorageGLES2::Shader::Spatial::DEPTH_DRAW_ALPHA_PREPASS:
-		case RasterizerStorageGLES2::Shader::Spatial::DEPTH_DRAW_OPAQUE: {
-			glDepthMask(!p_alpha_pass && !p_material->shader->spatial.uses_depth_texture);
-		} break;
-		case RasterizerStorageGLES2::Shader::Spatial::DEPTH_DRAW_ALWAYS: {
-			glDepthMask(GL_TRUE && !p_material->shader->spatial.uses_depth_texture);
-		} break;
-		case RasterizerStorageGLES2::Shader::Spatial::DEPTH_DRAW_NEVER: {
-			glDepthMask(GL_FALSE);
-		} break;
+	if (!p_shadow && storage->config.support_depth_texture) {
+		bool bind_depth_texture = !p_material->shader->spatial.uses_depth_texture;
+		if (state.current_depth_texture_bound != bind_depth_texture) {
+			if (bind_depth_texture) {
+				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, storage->frame.current_rt->depth, 0);
+			}
+			else {
+				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+			}
+
+			state.current_depth_texture_bound = bind_depth_texture;
+		}
+	}
+
+	if (state.current_depth_draw != p_material->shader->spatial.depth_draw_mode) {
+		switch (p_material->shader->spatial.depth_draw_mode) {
+			case RasterizerStorageGLES2::Shader::Spatial::DEPTH_DRAW_ALPHA_PREPASS:
+			case RasterizerStorageGLES2::Shader::Spatial::DEPTH_DRAW_OPAQUE: {
+				glDepthMask(!p_alpha_pass && !p_material->shader->spatial.uses_depth_texture);
+			} break;
+			case RasterizerStorageGLES2::Shader::Spatial::DEPTH_DRAW_ALWAYS: {
+				glDepthMask(GL_TRUE && !p_material->shader->spatial.uses_depth_texture);
+			} break;
+			case RasterizerStorageGLES2::Shader::Spatial::DEPTH_DRAW_NEVER: {
+				glDepthMask(GL_FALSE);
+			} break;
+		}
+
+		state.current_depth_draw = p_material->shader->spatial.depth_draw_mode;
 	}
 
 	int tc = p_material->textures.size();
@@ -2537,7 +2560,7 @@ void RasterizerSceneGLES2::_render_render_list(RenderList::Element **p_elements,
 		bool shader_rebind = false;
 		if (rebind || material != prev_material) {
 			storage->info.render.material_switch_count++;
-			shader_rebind = _setup_material(material, p_alpha_pass, Size2i(skeleton ? skeleton->size * 3 : 0, 0));
+			shader_rebind = _setup_material(material, p_alpha_pass, p_shadow, Size2i(skeleton ? skeleton->size * 3 : 0, 0));
 			if (shader_rebind) {
 				storage->info.render.shader_rebind_count++;
 			}
@@ -2659,6 +2682,9 @@ void RasterizerSceneGLES2::_render_render_list(RenderList::Element **p_elements,
 		prev_use_lightmap_capture = use_lightmap_capture;
 	}
 
+	if (!p_shadow && storage->config.support_depth_texture && !state.current_depth_texture_bound) {
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, storage->frame.current_rt->depth, 0);
+	}
 	_setup_light_type(nullptr, nullptr); //clear light stuff
 	state.scene_shader.set_conditional(SceneShaderGLES2::ENABLE_OCTAHEDRAL_COMPRESSION, false);
 	state.scene_shader.set_conditional(SceneShaderGLES2::USE_SKELETON, false);

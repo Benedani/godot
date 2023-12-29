@@ -331,7 +331,23 @@ Basis Basis::rotated(const Quat &p_quat) const {
 }
 
 void Basis::rotate(const Quat &p_quat) {
-	*this = rotated(p_quat);
+	real_t d = p_quat.length_squared();
+	real_t s = 2 / d;
+	real_t xs = p_quat.x * s, ys = p_quat.y * s, zs = p_quat.z * s;
+	real_t wx = p_quat.w * xs, wy = p_quat.w * ys, wz = p_quat.w * zs;
+	real_t xx = p_quat.x * xs, xy = p_quat.x * ys, xz = p_quat.x * zs;
+	real_t yy = p_quat.y * ys, yz = p_quat.y * zs, zz = p_quat.z * zs;
+	Vector3 _element0 = Vector3(1 - (yy + zz), xy - wz, xz + wy);
+	Vector3 _element1 = Vector3(xy + wz, 1 - (xx + zz), yz - wx);
+	Vector3 _element2 = Vector3(xz - wy, yz + wx, 1 - (xx + yy));
+	set(tdotx(_element0), tdoty(_element0), tdotz(_element0),
+			tdotx(_element1), tdoty(_element1), tdotz(_element1),
+			tdotx(_element2), tdoty(_element2), tdotz(_element2));
+	/*return Basis(
+			p_matrix.tdotx(elements[0]), p_matrix.tdoty(elements[0]), p_matrix.tdotz(elements[0]),
+			p_matrix.tdotx(elements[1]), p_matrix.tdoty(elements[1]), p_matrix.tdotz(elements[1]),
+			p_matrix.tdotx(elements[2]), p_matrix.tdoty(elements[2]), p_matrix.tdotz(elements[2]));
+	*this = rotated(p_quat);*/
 }
 
 Vector3 Basis::get_rotation_euler() const {

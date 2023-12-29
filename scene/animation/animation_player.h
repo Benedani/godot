@@ -103,6 +103,7 @@ private:
 		Vector3 loc_accum;
 		Quat rot_accum;
 		Vector3 scale_accum;
+		Transform transf_accum;
 		uint64_t accum_pass;
 
 		bool audio_playing;

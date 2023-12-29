@@ -395,6 +395,8 @@ void AnimationPlayer::_animation_process_animation(AnimationData *p_anim, float 
 					nc->rot_accum = nc->rot_accum.slerp(rot, p_interp);
 					nc->scale_accum = nc->scale_accum.linear_interpolate(scale, p_interp);
 				}
+				nc->transf_accum.origin = nc->loc_accum;
+				nc->transf_accum.basis.set_quat_scale(nc->rot_accum, nc->scale_accum);
 
 			} break;
 			case Animation::TYPE_VALUE: {
@@ -845,19 +847,16 @@ void AnimationPlayer::_animation_process2(float p_delta, bool p_started) {
 
 void AnimationPlayer::_animation_update_transforms() {
 	{
-		Transform t;
 		for (int i = 0; i < cache_update_size; i++) {
 			TrackNodeCache *nc = cache_update[i];
 
 			ERR_CONTINUE(nc->accum_pass != accum_pass);
 
-			t.origin = nc->loc_accum;
-			t.basis.set_quat_scale(nc->rot_accum, nc->scale_accum);
 			if (nc->skeleton && nc->bone_idx >= 0) {
-				nc->skeleton->set_bone_pose(nc->bone_idx, t);
+				nc->skeleton->set_bone_pose(nc->bone_idx, nc->transf_accum);
 
 			} else if (nc->spatial) {
-				nc->spatial->set_transform(t);
+				nc->spatial->set_transform(nc->transf_accum);
 			}
 		}
 	}

@@ -245,18 +245,18 @@ void Skeleton::_notification(int p_what) {
 						}
 						if (b.parent >= 0) {
 							b.pose_global = bonesptr[b.parent].pose_global * pose;
-							b.pose_global_no_override = bonesptr[b.parent].pose_global_no_override * pose;
+							//b.pose_global_no_override = bonesptr[b.parent].pose_global_no_override * pose;
 						} else {
 							b.pose_global = pose;
-							b.pose_global_no_override = pose;
+							//b.pose_global_no_override = pose;
 						}
 					} else {
 						if (b.parent >= 0) {
 							b.pose_global = bonesptr[b.parent].pose_global;
-							b.pose_global_no_override = bonesptr[b.parent].pose_global_no_override;
+							//b.pose_global_no_override = bonesptr[b.parent].pose_global_no_override;
 						} else {
 							b.pose_global = Transform();
-							b.pose_global_no_override = Transform();
+							//b.pose_global_no_override = Transform();
 						}
 					}
 				} else {
@@ -267,18 +267,18 @@ void Skeleton::_notification(int p_what) {
 						}
 						if (b.parent >= 0) {
 							b.pose_global = bonesptr[b.parent].pose_global * (b.rest * pose);
-							b.pose_global_no_override = bonesptr[b.parent].pose_global_no_override * (b.rest * pose);
+							//b.pose_global_no_override = bonesptr[b.parent].pose_global_no_override * (b.rest * pose);
 						} else {
 							b.pose_global = b.rest * pose;
-							b.pose_global_no_override = b.rest * pose;
+							//b.pose_global_no_override = b.rest * pose;
 						}
 					} else {
 						if (b.parent >= 0) {
 							b.pose_global = bonesptr[b.parent].pose_global * b.rest;
-							b.pose_global_no_override = bonesptr[b.parent].pose_global_no_override * b.rest;
+							//b.pose_global_no_override = bonesptr[b.parent].pose_global_no_override * b.rest;
 						} else {
 							b.pose_global = b.rest;
-							b.pose_global_no_override = b.rest;
+							//b.pose_global_no_override = b.rest;
 						}
 					}
 				}
@@ -303,18 +303,20 @@ void Skeleton::_notification(int p_what) {
 
 			//update skins
 			for (Set<SkinReference *>::Element *E = skin_bindings.front(); E; E = E->next()) {
-				const Skin *skin = E->get()->skin.operator->();
-				RID skeleton = E->get()->skeleton;
+				SkinReference *skinref = E->get();
+
+				const Skin *skin = skinref->skin.operator->();
+				RID skeleton = skinref->skeleton;
 				uint32_t bind_count = skin->get_bind_count();
 
-				if (E->get()->bind_count != bind_count) {
+				if (skinref->bind_count != bind_count) {
 					VS::get_singleton()->skeleton_allocate(skeleton, bind_count);
-					E->get()->bind_count = bind_count;
-					E->get()->skin_bone_indices.resize(bind_count);
-					E->get()->skin_bone_indices_ptrs = E->get()->skin_bone_indices.ptrw();
+					skinref->bind_count = bind_count;
+					skinref->skin_bone_indices.resize(bind_count);
+					skinref->skin_bone_indices_ptrs = skinref->skin_bone_indices.ptrw();
 				}
 
-				if (E->get()->skeleton_version != version) {
+				if (skinref->skeleton_version != version) {
 					for (uint32_t i = 0; i < bind_count; i++) {
 						StringName bind_name = skin->get_bind_name(i);
 
@@ -323,7 +325,7 @@ void Skeleton::_notification(int p_what) {
 							bool found = false;
 							for (int j = 0; j < len; j++) {
 								if (bonesptr[j].name == bind_name) {
-									E->get()->skin_bone_indices_ptrs[i] = j;
+									skinref->skin_bone_indices_ptrs[i] = j;
 									found = true;
 									break;
 								}
@@ -331,27 +333,27 @@ void Skeleton::_notification(int p_what) {
 
 							if (!found) {
 								ERR_PRINT("Skin bind #" + itos(i) + " contains named bind '" + String(bind_name) + "' but Skeleton has no bone by that name.");
-								E->get()->skin_bone_indices_ptrs[i] = 0;
+								skinref->skin_bone_indices_ptrs[i] = 0;
 							}
 						} else if (skin->get_bind_bone(i) >= 0) {
 							int bind_index = skin->get_bind_bone(i);
 							if (bind_index >= len) {
 								ERR_PRINT("Skin bind #" + itos(i) + " contains bone index bind: " + itos(bind_index) + " , which is greater than the skeleton bone count: " + itos(len) + ".");
-								E->get()->skin_bone_indices_ptrs[i] = 0;
+								skinref->skin_bone_indices_ptrs[i] = 0;
 							} else {
-								E->get()->skin_bone_indices_ptrs[i] = bind_index;
+								skinref->skin_bone_indices_ptrs[i] = bind_index;
 							}
 						} else {
 							ERR_PRINT("Skin bind #" + itos(i) + " does not contain a name nor a bone index.");
-							E->get()->skin_bone_indices_ptrs[i] = 0;
+							skinref->skin_bone_indices_ptrs[i] = 0;
 						}
 					}
 
-					E->get()->skeleton_version = version;
+					skinref->skeleton_version = version;
 				}
 
 				for (uint32_t i = 0; i < bind_count; i++) {
-					uint32_t bone_index = E->get()->skin_bone_indices_ptrs[i];
+					uint32_t bone_index = skinref->skin_bone_indices_ptrs[i];
 					ERR_CONTINUE(bone_index >= (uint32_t)len);
 					vs->skeleton_bone_set_transform(skeleton, i, bonesptr[bone_index].pose_global * skin->get_bind_pose(i));
 				}
