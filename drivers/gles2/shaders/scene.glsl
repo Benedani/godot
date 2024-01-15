@@ -182,6 +182,20 @@ varying highp vec4 shadow_coord4;
 
 #endif
 
+#if defined(USE_LIGHTING)
+
+#if defined(USE_RADIANCE_MAP) && (!defined(GL_EXT_shader_texture_lod) || !defined(GL_ARB_shader_texture_lod))
+
+#define RADIANCE_MAP_VERTEX_FIX
+
+varying mediump vec3 env_ambient;
+uniform samplerCube radiance_map; // texunit:-2
+uniform mediump mat4 radiance_inverse_xform;
+
+#endif
+
+#endif
+
 #if defined(USE_VERTEX_LIGHTING) && defined(USE_LIGHTING)
 
 varying highp vec3 diffuse_interp;
@@ -570,6 +584,13 @@ VERTEX_SHADER_CODE
 #endif //depth
 
 //vertex lighting
+#ifdef RADIANCE_MAP_VERTEX_FIX
+	{
+		vec3 ambient_dir = normalize((radiance_inverse_xform * vec4(normal, 0.0)).xyz);
+		env_ambient = textureCubeLod(radiance_map, ambient_dir, 4.0).xyz;
+	}
+#endif
+
 #if defined(USE_VERTEX_LIGHTING) && defined(USE_LIGHTING)
 	//vertex shaded version of lighting (more limited)
 	vec3 L;
@@ -1044,7 +1065,7 @@ uniform mediump vec4 lightmap_captures[12];
 
 uniform samplerCube radiance_map; // texunit:-2
 
-uniform mat4 radiance_inverse_xform;
+uniform mediump mat4 radiance_inverse_xform;
 
 #endif
 
@@ -1150,6 +1171,14 @@ varying vec2 uv_interp;
 
 #if defined(ENABLE_UV2_INTERP) || defined(USE_LIGHTMAP)
 varying vec2 uv2_interp;
+#endif
+
+#if defined(USE_LIGHTING) && (!defined(GL_EXT_shader_texture_lod) || !defined(GL_ARB_shader_texture_lod))
+
+#define RADIANCE_MAP_VERTEX_FIX
+
+varying mediump vec3 env_ambient;
+
 #endif
 
 varying vec3 view_interp;
@@ -1751,6 +1780,8 @@ FRAGMENT_SHADER_CODE
 	specular_light = textureCubeLod(radiance_map, ref_vec, roughness * RADIANCE_MAX_LOD).xyz * bg_energy;
 	specular_light *= horizon * horizon;
 #ifndef USE_LIGHTMAP
+
+#ifndef RADIANCE_MAP_VERTEX_FIX
 	{
 		vec3 ambient_dir = normalize((radiance_inverse_xform * vec4(normal, 0.0)).xyz);
 		vec3 env_ambient = textureCubeLod(radiance_map, ambient_dir, 4.0).xyz * bg_energy;
@@ -1758,6 +1789,10 @@ FRAGMENT_SHADER_CODE
 
 		ambient_light = mix(ambient_color.rgb, env_ambient, ambient_sky_contribution);
 	}
+#else
+	ambient_light = mix(ambient_color.rgb, env_ambient * bg_energy * (1.0 - F), ambient_sky_contribution);
+#endif
+
 #endif
 
 #else
